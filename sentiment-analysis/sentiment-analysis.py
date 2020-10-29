@@ -61,8 +61,9 @@ def expand_features(tweet):
         emoji = emojis[i]
         if emoji in tweet['text']:
             tweet['lemma'].append(f'-EMOJI{i}-')
-    return tweet
     '''
+    return tweet
+
 
 train_filepath = 'datasets/v1/training-all.csv'
 train_cleantext = []
