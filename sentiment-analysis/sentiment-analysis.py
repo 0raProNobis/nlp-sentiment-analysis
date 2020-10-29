@@ -56,12 +56,13 @@ def expand_features(tweet):
             continue
         tweet['lemma'].append(token.lemma_)
         #tweet['dep_bigram'].append(f'{token.lemma_}{token.head.lemma_}')
-
+    '''
     for i in range(len(emojis)):
         emoji = emojis[i]
         if emoji in tweet['text']:
             tweet['lemma'].append(f'-EMOJI{i}-')
     return tweet
+    '''
 
 train_filepath = 'datasets/v1/training-all.csv'
 train_cleantext = []
@@ -73,7 +74,7 @@ with open(train_filepath, encoding='utf8') as csvfile:
     for tweet in training:
         training = expand_features(tweet)
         train_cleantext.append(' '.join(tweet['lemma']) + ' ' + ' '.join(tweet['dep_bigram']))
-        train_target.append(tweet['airline_sentiment'])
+        train_target.append(tweet['isnegative'])
         train_features.append(tweet)
 
 validate_filepath = 'datasets/v1/validation-all.csv'
@@ -85,11 +86,18 @@ with open(validate_filepath, encoding='utf8') as csvfile:
     for tweet in validate:
         validate = expand_features(tweet)
         valdidate_cleantext.append(' '.join(tweet['lemma']) + ' ' + ' '.join(tweet['dep_bigram']))
-        validate_target.append(tweet['airline_sentiment'])
+        validate_target.append(tweet['isnegative'])
         validate_features.append(tweet)
 
-
-v = CountVectorizer(analyzer = 'word')
+# Stop words don't have much of an effect
+# max_df=0.75 (99.7, 70.0) (99.7, 76.0)
+# max_df=0.5 (99.7, 70.5) (99.7, 76.0)
+# max_df=0.3 (99.7, 70.4) (99.7, 76.3)
+# max_df=0.1 (99.66, 70.6) (99.67, 77.7)
+# max_df=0.07 (99.3, 66.2) (99.4, 73.8)
+# max_df=0.05 (99.2, 64.9) (99.3, 73.0)
+# max_df=0.01 (95.9, 58.6) (95.9, 63.3)
+v = CountVectorizer(analyzer = 'word', max_df=0.1)
 train_vectors = v.fit_transform(train_cleantext)
 validate_vectors = v.transform(valdidate_cleantext)
 
@@ -121,11 +129,15 @@ Classifiers = [
 
 Accuracy = []
 Model = []
+training_predictions = []
+validation_predictions = []
 for classifier in Classifiers:
     fit = classifier.fit(train_features,train_target)
     pred_train = fit.predict(train_features)
+    training_predictions.append(pred_train)
     accuracy_train = accuracy_score(pred_train,train_target)
     pred_val = fit.predict(validate_features)
+    validation_predictions.append(pred_val)
     accuracy_val = accuracy_score(pred_val,validate_target)
     Accuracy.append(accuracy_val)
     Model.append(classifier.__class__.__name__)
@@ -140,3 +152,22 @@ for classifier in Classifiers:
     plt.yticks([0, 1, 2], ['Negative', 'Neutral', 'Positive'], fontsize=16)
     plt.show()
     '''
+
+### Voting
+num_classifiers = len(validation_predictions)
+voted_pred = [0] * num_classifiers
+for i in range(num_classifiers):
+    for j in range(len(validation_predictions[0])):
+        voted_pred += (validation_predictions[i][j] / num_classifiers)
+
+for i in range(len(voted_pred)):
+        if voted_pred[i] > 0.5:
+            voted[i] = 1
+        else:
+            voted[i] = 0
+
+
+accuracy_vote = accuracy_score(voted_pred,validate_target)
+Accuracy.append(accuracy_vote)
+print('Accuracy on validation data of voting is '+str(accuracy_val))
+print(classification_report(voted_pred,validate_target))
